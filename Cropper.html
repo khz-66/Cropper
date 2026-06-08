@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="css/index.css">
+
+  <script src="p5.min.js"></script>
+
+  <title>Cropper</title>
+ 
+  <style>
+    #uploadZone {
+      background: #eee;
+      padding: 20px;
+      width: 100%;
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Cropper</h1>
+  <p>Beschneidet einfarbige Bildränder und speichert als dateiname_cropped.</p>
+  <p><a href="https://khz-66.github.io/">Homepage</a><br></p>
+  <div id="uploadZone">
+    <input id="fileInput" type="file" multiple>
+  </div>
+
+  <script>
+    let bilderWarteschlange = [];
+    let dateiNamen = [];
+    let dateiEndungen = [];
+    let aktuellesBildIndex = 0;
+    let verarbeitungGestartet = false;
+
+    function setup() {
+      createCanvas(400, 150);
+      pixelDensity(1);
+      noLoop();
+
+      let fileInput = select("#fileInput");
+      fileInput.changed(() => {
+        let files = fileInput.elt.files;
+        for (let f of files) {
+          handleFile({ 
+            type: "image",
+            name: f.name,
+            data: URL.createObjectURL(f)
+          });
+        }
+      });
+
+      ZeigeStartBildschirm();
+    }
+
+    function ZeigeStartBildschirm() {
+      background(240);
+      fill(50);
+      noStroke();
+      textAlign(LEFT, TOP);
+      textSize(13);
+      text("1. Klicke auf 'Datei auswählen'\n2. Wähle ein oder mehrere Bilder aus\n\nDie Verarbeitung startet sofort automatisch.", 20, 60);
+    }
+
+    function handleFile(file) {
+      if (file.type === 'image') {
+        let punkteIndex = file.name.lastIndexOf('.');
+        let endung = punkteIndex !== -1 ? file.name.substring(punkteIndex + 1).toLowerCase() : 'png';
+        if (endung === 'jpeg') endung = 'jpg';
+
+        let img = loadImage(file.data, () => {
+          bilderWarteschlange.push(img);
+          dateiNamen.push(file.name.substring(0, punkteIndex));
+          dateiEndungen.push(endung);
+
+          if (!verarbeitungGestartet) {
+            verarbeitungGestartet = true;
+            setTimeout(() => { redraw(); }, 300);
+          }
+        });
+      }
+    }
+
+    function draw() {
+      if (verarbeitungGestartet && aktuellesBildIndex < bilderWarteschlange.length) {
+        verarbeiteBild(bilderWarteschlange[aktuellesBildIndex]);
+      }
+    }
+
+    function verarbeiteBild(img) {
+      img.loadPixels();
+
+      let randR = img.pixels[0];
+      let randG = img.pixels[1];
+      let randB = img.pixels[2];
+      let randA = img.pixels[3];
+
+      let w = img.width;
+      let h = img.height;
+
+      let minX = w, maxX = 0, minY = h, maxY = 0;
+      let randGefunden = false;
+
+      let toleranz = 25;
+
+      function istRandFarbe(x, y) {
+        let index = (x + y * w) * 4;
+        let r = img.pixels[index];
+        let g = img.pixels[index + 1];
+        let b = img.pixels[index + 2];
+        let a = img.pixels[index + 3];
+
+        return abs(r - randR) <= toleranz &&
+               abs(g - randG) <= toleranz &&
+               abs(b - randB) <= toleranz &&
+               abs(a - randA) <= toleranz;
+      }
+
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          if (!istRandFarbe(x, y)) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+            randGefunden = true;
+          }
+        }
+      }
+
+      if (randGefunden) {
+        let padding = 2;
+
+        minX += padding;
+        maxX -= padding;
+        minY += padding;
+        maxY -= padding;
+
+        if (minX > maxX) minX = maxX;
+        if (minY > maxY) minY = maxY;
+
+        let neuerInhaltW = (maxX - minX) + 1;
+        let neuerInhaltH = (maxY - minY) + 1;
+
+        resizeCanvas(neuerInhaltW, neuerInhaltH);
+        image(img, 0, 0, neuerInhaltW, neuerInhaltH, minX, minY, neuerInhaltW, neuerInhaltH);
+
+        let basisName = dateiNamen[aktuellesBildIndex];
+        let ext = dateiEndungen[aktuellesBildIndex];
+        let neuerName = basisName + '_cropped.' + ext;
+
+        saveCanvas(neuerName);
+
+        resizeCanvas(400, 150);
+        background(200, 230, 200);
+        fill(0, 100, 0);
+        text(`Verarbeitet (${aktuellesBildIndex + 1}/${bilderWarteschlange.length}):\n${neuerName}`, 20, 70);
+      }
+
+      aktuellesBildIndex++;
+      if (aktuellesBildIndex < bilderWarteschlange.length) {
+        setTimeout(() => { redraw(); }, 1000);
+      } else {
+        background(0, 120, 0);
+        fill(255);
+        textSize(14);
+        textAlign(CENTER, CENTER);
+        text(`Fertig! ${bilderWarteschlange.length} Bilder erfolgreich konvertiert.`, width / 2, height / 2 + 20);
+
+        verarbeitungGestartet = false;
+        bilderWarteschlange = [];
+        dateiNamen = [];
+        dateiEndungen = [];
+        aktuellesBildIndex = 0;
+      }
+    }
+  </script>
+  </body>
+</html>
